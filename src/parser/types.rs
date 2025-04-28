@@ -1,9 +1,9 @@
 pub enum Statement<'a > {
     Label(&'a str),
-    Operation(OperationType, Option<Operand<'a>>, Option<Operand<'a>>)
+    Operation(Instruction, Option<Operand<'a>>, Option<Operand<'a>>)
 }
 
-pub enum OperationType {
+pub enum Instruction {
     Add,
     Sub,
     Cmp,
