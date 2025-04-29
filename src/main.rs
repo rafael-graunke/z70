@@ -1,14 +1,9 @@
 mod parser;
 
-use crate::parser::types::Statement;
-use crate::parser::parse_label;
+use crate::parser::parse_file;
 
 fn main() {
-    let (_, teste) = parse_label("TASDASD        :      \n").unwrap();
+    let result = parse_file("mov A, B\n LOOP: \n dec A\n");
 
-    match teste {
-        Statement::Label(name) => { println!("{}<<<", name) },
-        Statement::Operation(_,_,_ ) => { print!("boom"); }
-    }
-
+    println!("AAAAAAAAAAAAAAAAAAAAAA {:?}", result);
 }

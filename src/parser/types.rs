@@ -1,8 +1,10 @@
+#[derive(PartialEq, Debug)]
 pub enum Statement<'a > {
     Label(&'a str),
     Operation(Instruction, Option<Operand<'a>>, Option<Operand<'a>>)
 }
 
+#[derive(PartialEq, Debug)]
 pub enum Instruction {
     Add,
     Sub,
@@ -24,6 +26,7 @@ pub enum Instruction {
     Nop
 }
 
+#[derive(PartialEq, Debug)]
 pub enum Operand<'a> {
     Label(&'a str),
     A,
