@@ -100,10 +100,7 @@ fn assemble_statement(
 
             let label_address = match labels.get(label.to_owned()) {
                 Some(value) => value.to_owned(),
-                _ => {
-                    println!("{:?}", labels);
-                    return Err("Label not found");
-                }
+                _ => return Err("Label not found"),
             };
 
             bytes.push(label_address);
@@ -134,7 +131,7 @@ fn assemble_statement(
         Statement::Operation(instruction @ Instruction::Nop, None, None) => {
             let instruction_byte = assemble_instruction(instruction);
             bytes.push(instruction_byte);
-        },
+        }
 
         _ => return Err("Invalid statement"),
     };
@@ -280,9 +277,7 @@ mod tests {
         assert!(matches!(
             assemble_statement(
                 // nop
-                &Statement::Operation(
-                    Instruction::Nop, None, None
-                ),
+                &Statement::Operation(Instruction::Nop, None, None),
                 &labels,
                 &mut bytes
             ),

@@ -3,7 +3,7 @@ use nom::{
     Err as NomErr, IResult, Parser,
     branch::alt,
     bytes::{complete::take_till, tag, tag_no_case, take, take_while},
-    character::complete::{line_ending, newline, space0, space1},
+    character::complete::{line_ending, space0, space1},
     combinator::eof,
     error::{Error, ErrorKind},
     multi::many_till,
@@ -32,13 +32,13 @@ fn parse_statement(input: &str) -> IResult<&str, Option<Statement>> {
 
 fn end_of_statement(input: &str) -> IResult<&str, ()> {
     let (input, _) = space0(input)?;
-    let (input, _) = newline(input)?;
+    let (input, _) = line_ending(input)?;
     Ok((input, ()))
 }
 
 fn parse_label_declaration(input: &str) -> IResult<&str, Statement> {
     let (input, name) = terminated(
-        take_while(|c| ![':', ' ', '\n'].contains(&c)),
+        take_while(|c| ![':', ' ', '\n', '\r'].contains(&c)),
         (space0, tag(":"), end_of_statement),
     )
     .parse(input)?;
@@ -255,8 +255,6 @@ mod tests {
         assert!(matches!(parse_operand("A"), Ok((_, Some(Operand::A)))));
         assert!(matches!(parse_operand("B"), Ok((_, Some(Operand::B)))));
         assert!(matches!(parse_operand("I"), Ok((_, Some(Operand::I)))));
-        let r = parse_operand("10H");
-        println!("{:?}", r);
         assert!(matches!(
             parse_operand("10H"),
             Ok((_, Some(Operand::Const(0x10))))
