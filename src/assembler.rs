@@ -100,7 +100,10 @@ fn assemble_statement(
 
             let label_address = match labels.get(label.to_owned()) {
                 Some(value) => value.to_owned(),
-                _ => return Err("Label not found"),
+                _ => {
+                    println!("{:?}", labels);
+                    return Err("Label not found");
+                }
             };
 
             bytes.push(label_address);
@@ -128,7 +131,10 @@ fn assemble_statement(
             bytes.push(instruction_byte);
         }
 
-        Statement::Operation(Instruction::Nop, None, None) => (),
+        Statement::Operation(instruction @ Instruction::Nop, None, None) => {
+            let instruction_byte = assemble_instruction(instruction);
+            bytes.push(instruction_byte);
+        },
 
         _ => return Err("Invalid statement"),
     };
@@ -147,6 +153,9 @@ fn first_pass(statements: &Vec<Statement>, labels: &mut HashMap<String, u8>) {
             Statement::Operation(_, Some(Operand::MemConst(_)) | Some(Operand::Const(_)), _) => {
                 addr += 2;
             }
+            Statement::Operation(Instruction::Jmp, Some(Operand::Label(_)), _) => {
+                addr += 2;
+            }
             Statement::Label(label) => {
                 labels.insert(label.to_string(), addr);
                 addr += 1;
@@ -158,15 +167,19 @@ fn first_pass(statements: &Vec<Statement>, labels: &mut HashMap<String, u8>) {
     }
 }
 
-fn second_pass(statements: &Vec<Statement>, labels: &HashMap<String, u8>, bytes: &mut Vec<u8>) -> Result<(), &'static str>{
+fn second_pass(
+    statements: &Vec<Statement>,
+    labels: &HashMap<String, u8>,
+    bytes: &mut Vec<u8>,
+) -> Result<(), &'static str> {
     for st in statements {
         assemble_statement(st, &labels, bytes)?;
-    };
+    }
 
     Ok(())
 }
 
-fn assemble_file(source: &mut File, target: &str) -> Result<(), &'static str> {
+pub fn assemble_file(source: &mut File, target: &str) -> Result<(), &'static str> {
     let mut asm: String = String::new();
     source.read_to_string(&mut asm).unwrap();
 
@@ -178,8 +191,7 @@ fn assemble_file(source: &mut File, target: &str) -> Result<(), &'static str> {
     first_pass(&statements, &mut labels);
 
     second_pass(&statements, &labels, &mut bytes)?;
-
-    let mut file = File::open(target).unwrap();
+    let mut file = File::create(target).unwrap();
     file.write_all(&bytes).unwrap();
 
     Ok(())
@@ -207,7 +219,11 @@ mod tests {
         assert!(matches!(
             assemble_statement(
                 // Invalid memory2memory operands "mov [I], [80H]"
-                &Statement::Operation(Instruction::Mov, Some(Operand::MemI), Some(Operand::MemConst(0x80))),
+                &Statement::Operation(
+                    Instruction::Mov,
+                    Some(Operand::MemI),
+                    Some(Operand::MemConst(0x80))
+                ),
                 &labels,
                 &mut bytes
             ),
@@ -217,7 +233,11 @@ mod tests {
         assert!(matches!(
             assemble_statement(
                 // Subtle invalid operands "mov I, [80H]"
-                &Statement::Operation(Instruction::Mov, Some(Operand::I), Some(Operand::MemConst(0x80))),
+                &Statement::Operation(
+                    Instruction::Mov,
+                    Some(Operand::I),
+                    Some(Operand::MemConst(0x80))
+                ),
                 &labels,
                 &mut bytes
             ),
@@ -242,14 +262,33 @@ mod tests {
 
         assert!(matches!(
             assemble_statement(
-                // mov A, [80H]"
-                &Statement::Operation(Instruction::Mov, Some(Operand::A), Some(Operand::MemConst(0x80))),
+                // mov A, [80H]
+                &Statement::Operation(
+                    Instruction::Mov,
+                    Some(Operand::A),
+                    Some(Operand::MemConst(0x80))
+                ),
                 &labels,
                 &mut bytes
             ),
             Ok(())
         ));
         assert_eq!(bytes, vec![0xBA, 0x80]);
+
+        bytes.clear();
+
+        assert!(matches!(
+            assemble_statement(
+                // nop
+                &Statement::Operation(
+                    Instruction::Nop, None, None
+                ),
+                &labels,
+                &mut bytes
+            ),
+            Ok(())
+        ));
+        assert_eq!(bytes, vec![0xFF]);
     }
 
     #[test]
@@ -259,28 +298,32 @@ mod tests {
 
         let statements = &vec![
             Statement::Label("LOOP"),
-            Statement::Operation(Instruction::Jmp, Some(Operand::Label("LOOP")), None)
+            Statement::Operation(Instruction::Jmp, Some(Operand::Label("LOOP")), None),
         ];
-        first_pass(
-            statements,
-            &mut labels
-        );
-        assert!(matches!(second_pass(statements, &labels, &mut bytes), Ok(())));
+        first_pass(statements, &mut labels);
+        assert!(matches!(
+            second_pass(statements, &labels, &mut bytes),
+            Ok(())
+        ));
         assert_eq!(bytes, vec![0xA0, 0x00]);
 
         bytes.clear();
 
         let statements = &vec![
-            Statement::Operation(Instruction::Add, Some(Operand::A), Some(Operand::Const(0x10))), // 2 bytes
+            Statement::Operation(
+                Instruction::Add,
+                Some(Operand::A),
+                Some(Operand::Const(0x10)),
+            ), // 2 bytes
             Statement::Operation(Instruction::Inc, Some(Operand::A), None), // 1 bytes
             Statement::Label("LOOP"), // should map to address 0x3
-            Statement::Operation(Instruction::Jmp, Some(Operand::Label("LOOP")), None)
+            Statement::Operation(Instruction::Jmp, Some(Operand::Label("LOOP")), None),
         ];
-        first_pass(
-            statements,
-            &mut labels
-        );
-        assert!(matches!(second_pass(statements, &labels, &mut bytes), Ok(())));
+        first_pass(statements, &mut labels);
+        assert!(matches!(
+            second_pass(statements, &labels, &mut bytes),
+            Ok(())
+        ));
         assert_eq!(bytes, vec![0x06, 0x10, 0x30, 0xA0, 0x03]);
     }
 }
