@@ -3,38 +3,42 @@ use nom::{
     Err as NomErr, IResult, Parser,
     branch::alt,
     bytes::{complete::take_till, tag, tag_no_case, take, take_while},
-    character::complete::{newline, space0, space1},
-    combinator::complete,
+    character::complete::{line_ending, space0, space1},
+    combinator::eof,
     error::{Error, ErrorKind},
-    multi::many0,
+    multi::many_till,
     sequence::{delimited, terminated},
 };
 use types::{Instruction, Operand, Statement};
 
 pub fn parse_file(input: &str) -> IResult<&str, Vec<Statement>> {
-    let (input, statements) = many0(complete(parse_statement)).parse(input)?;
+    let (input, (statements, _)) = many_till(parse_statement, eof).parse(input)?;
 
-    Ok((input, statements))
+    Ok((input, statements.into_iter().flatten().collect()))
 }
 
-fn parse_statement(input: &str) -> IResult<&str, Statement> {
-    println!("\"{}\"", input);
-
+fn parse_statement(input: &str) -> IResult<&str, Option<Statement>> {
     let (input, _) = space0(input)?;
-    let (input, statement) = alt((parse_operation, parse_label_declaration)).parse(input)?;
-
-    Ok((input, statement))
+    let result: IResult<&str, &str> = line_ending(input);
+    match result {
+        Ok((input, _)) => Ok((input, None)),
+        Err(_) => {
+            let (input, statement) =
+                alt((parse_operation, parse_label_declaration)).parse(input)?;
+            Ok((input, Some(statement)))
+        }
+    }
 }
 
 fn end_of_statement(input: &str) -> IResult<&str, ()> {
     let (input, _) = space0(input)?;
-    let (input, _) = newline(input)?;
+    let (input, _) = line_ending(input)?;
     Ok((input, ()))
 }
 
 fn parse_label_declaration(input: &str) -> IResult<&str, Statement> {
     let (input, name) = terminated(
-        take_while(|c| ![':', ' ', '\n'].contains(&c)),
+        take_while(|c| ![':', ' ', '\n', '\r'].contains(&c)),
         (space0, tag(":"), end_of_statement),
     )
     .parse(input)?;
@@ -301,18 +305,26 @@ mod tests {
         assert_eq!(remainder, " LOOP: \n dec A\n");
         assert_eq!(
             statement,
-            Statement::Operation(Instruction::Mov, Some(Operand::A), Some(Operand::B))
+            Some(Statement::Operation(
+                Instruction::Mov,
+                Some(Operand::A),
+                Some(Operand::B)
+            ))
         );
 
         let (remainder, statement) = parse_statement(remainder).unwrap();
         assert_eq!(remainder, " dec A\n");
-        assert_eq!(statement, Statement::Label("LOOP"));
+        assert_eq!(statement, Some(Statement::Label("LOOP")));
 
         let (remainder, statement) = parse_statement(remainder).unwrap();
         assert_eq!(remainder, "");
         assert_eq!(
             statement,
-            Statement::Operation(Instruction::Dec, Some(Operand::A), None)
+            Some(Statement::Operation(
+                Instruction::Dec,
+                Some(Operand::A),
+                None
+            ))
         );
     }
 
@@ -333,5 +345,11 @@ mod tests {
                 Statement::Operation(Instruction::Jmp, Some(Operand::Label("LOOP")), None),
             ])
         )
+    }
+
+    #[test]
+    fn test_parse_file_breaks() {
+        let result = parse_file("m0v A, B");
+        assert!(matches!(result, Err(_)));
     }
 }
